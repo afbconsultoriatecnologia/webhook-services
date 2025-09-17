@@ -1,0 +1,1211 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id                   String                @id @default(cuid())
+  email                String                @unique
+  password             String
+  name                 String
+  active               Boolean               @default(true)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  address              String?
+  avatar               String?
+  bio                  String?
+  city                 String?
+  cpf                  String?
+  lastLogin            DateTime?
+  phone                String?
+  state                String?
+  zipCode              String?
+  isOnline             Boolean               @default(false)
+  lastActivity         DateTime?
+  notificationEmail    Boolean?              @default(true) @map("notification_email")
+  notificationSms      Boolean?              @default(false) @map("notification_sms")
+  notificationWhatsapp Boolean?              @default(true) @map("notification_whatsapp")
+  notificationBrowser  Boolean?              @default(true) @map("notification_browser")
+  preferredLanguage    String?               @default("pt") @map("preferred_language")
+  chatMessages         ChatMessage[]
+  paciente             Paciente?
+  profissional         Profissional?
+  sessoes              Sessao[]
+  usuarioPapeis        UsuarioPapel[]
+  usuarioTema          UsuarioTema?
+  onlineStatus         UsuarioOnlineStatus[]
+
+  @@map("users")
+}
+
+model Papel {
+  id            String           @id @default(cuid())
+  name          String           @unique
+  description   String?
+  active        Boolean          @default(true)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  modulos       PapelModulo[]
+  permissoes    PapelPermissao[]
+  usuarioPapeis UsuarioPapel[]
+
+  @@map("roles")
+}
+
+model Permissao {
+  id              String            @id @default(cuid())
+  name            String            @unique
+  description     String?
+  resource        String
+  action          String
+  active          Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  modulos         ModuloPermissao[]
+  papelPermissoes PapelPermissao[]
+
+  @@map("permissions")
+}
+
+model UsuarioPapel {
+  id         String   @id @default(cuid())
+  usuarioId  String
+  papelId    String
+  active     Boolean  @default(true)
+  assignedAt DateTime @default(now())
+  papel      Papel    @relation(fields: [papelId], references: [id], onDelete: Cascade)
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, papelId])
+  @@map("user_roles")
+}
+
+model PapelPermissao {
+  id          String    @id @default(cuid())
+  papelId     String
+  permissaoId String
+  active      Boolean   @default(true)
+  assignedAt  DateTime  @default(now())
+  papel       Papel     @relation(fields: [papelId], references: [id], onDelete: Cascade)
+  permissao   Permissao @relation(fields: [permissaoId], references: [id], onDelete: Cascade)
+
+  @@unique([papelId, permissaoId])
+  @@map("role_permissions")
+}
+
+/// Relação entre papéis e módulos
+/// Rastreia quais módulos estão acessíveis para cada papel
+model PapelModulo {
+  id        String   @id @default(cuid())
+  papelId   String
+  moduloId  String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  modulo    Modulo   @relation(fields: [moduloId], references: [id], onDelete: Cascade)
+  papel     Papel    @relation(fields: [papelId], references: [id], onDelete: Cascade)
+
+  @@unique([papelId, moduloId])
+  @@map("papel_modulos")
+}
+
+/// Relação entre módulos e permissões
+/// Define quais permissões pertencem a cada módulo
+model ModuloPermissao {
+  id          String    @id @default(cuid())
+  moduloId    String
+  permissaoId String
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  modulo      Modulo    @relation(fields: [moduloId], references: [id], onDelete: Cascade)
+  permissao   Permissao @relation(fields: [permissaoId], references: [id], onDelete: Cascade)
+
+  @@unique([moduloId, permissaoId])
+  @@map("modulo_permissoes")
+}
+
+model Sessao {
+  id        String   @id @default(cuid())
+  usuarioId String
+  token     String   @unique
+  expiresAt DateTime
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+/// Tentativas de login para auditoria de segurança
+/// Registra todas tentativas de autenticação (sucesso e falha)
+model TentativaLogin {
+  id        String   @id @default(cuid())
+  email     String
+  success   Boolean
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@map("tentativas_login")
+}
+
+/// *
+/// * Modelo para temas do sistema
+/// * Suporta temas padrão e customizados
+model Tema {
+  id                String                   @id @default(cuid())
+  name              String                   @unique
+  displayName       String
+  description       String?
+  config            Json
+  isDefault         Boolean                  @default(false)
+  isCustom          Boolean                  @default(false)
+  isActive          Boolean                  @default(true)
+  isForced          Boolean                  @default(false)
+  forcedAt          DateTime?
+  forcedBy          String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  createdBy         String?
+  moduloConfigTemas ConfiguracaoTemaModulo[]
+  usuarioTemas      UsuarioTema[]
+
+  @@map("themes")
+}
+
+/// *
+/// * Preferências de tema por usuário
+/// * Permite override individual mesmo com tema forçado
+model UsuarioTema {
+  id        String   @id @default(cuid())
+  usuarioId String   @unique
+  temaId    String
+  overrides Json?
+  setAt     DateTime @default(now())
+  autoSet   Boolean  @default(false)
+  tema      Tema     @relation(fields: [temaId], references: [id], onDelete: Cascade)
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("user_themes")
+}
+
+/// *
+/// * Configurações globais do sistema
+/// * Para controle centralizado de temas e outras configurações
+model ConfiguracoesSistema {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Json
+  description String?
+  category    String
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+
+  @@map("system_settings")
+}
+
+/// *
+/// * Módulos do sistema
+/// * Define os módulos disponíveis na aplicação (telemedicina, pabx, prontuários, etc.)
+model Modulo {
+  id            String                  @id @default(cuid())
+  name          String                  @unique
+  displayName   String
+  description   String?
+  icon          String?
+  route         String                  @unique
+  isActive      Boolean                 @default(true)
+  order         Int                     @default(0)
+  color         String?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  createdBy     String?
+  configuracoes ConfiguracaoModulo[]
+  configTemas   ConfiguracaoTemaModulo?
+  permissoes    ModuloPermissao[]
+  papeis        PapelModulo[]
+
+  @@map("modules")
+}
+
+/// *
+/// * Configurações específicas por módulo
+/// * Permite configurar cada módulo individualmente
+model ConfiguracaoModulo {
+  id          String   @id @default(cuid())
+  moduloId    String
+  key         String
+  value       Json
+  type        String
+  category    String
+  label       String
+  description String?
+  isRequired  Boolean  @default(false)
+  isPublic    Boolean  @default(false)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+  modulo      Modulo   @relation(fields: [moduloId], references: [id], onDelete: Cascade)
+
+  @@unique([moduloId, key])
+  @@map("module_configurations")
+}
+
+/// *
+/// * Configurações de tema específicas por módulo
+/// * Permite cada módulo ter seu próprio tema personalizado
+model ConfiguracaoTemaModulo {
+  id          String   @id @default(cuid())
+  moduloId    String   @unique
+  temaId      String?
+  customTheme Json?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+  modulo      Modulo   @relation(fields: [moduloId], references: [id], onDelete: Cascade)
+  tema        Tema?    @relation(fields: [temaId], references: [id])
+
+  @@map("module_theme_configs")
+}
+
+/// *
+/// * Profissionais de saúde (médicos, enfermeiros, nutricionistas, etc.)
+/// * Todos os profissionais habilitados para atuar na telemedicina
+model Profissional {
+  id                          String                        @id @default(cuid())
+  userId                      String                        @unique
+  registro                    String                        @unique
+  tipoRegistro                String
+  categoria                   String
+  isActive                    Boolean                       @default(true)
+  createdAt                   DateTime                      @default(now())
+  updatedAt                   DateTime                      @updatedAt
+  especialidades              String[]
+  ufRegistro                  String
+  consultaTempos              ConsultaTempo[]
+  consultas                   Consulta[]
+  disponibilidadesEspecificas DisponibilidadeEspecifica[]
+  disponibilidade             DisponibilidadeProfissional[]
+  escalasProfissionais        EscalaProfissionais[]
+  evolucoes                   Evolucao[]
+  memedRegistro               MemedRegistro?
+  periodosEsperaAnteriores    PeriodoEspera[]               @relation("ProfissionalAnterior")
+  user                        Usuario                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  voucherAcessos              ProfissionalVoucherAcesso[]
+
+  @@map("profissionais_saude")
+}
+
+/// *
+/// * Pacientes do sistema de telemedicina
+/// * Dados pessoais e informações de saúde dos pacientes
+model Paciente {
+  id                  String             @id @default(cuid())
+  nome                String
+  cpf                 String             @unique
+  rg                  String?
+  dataNascimento      DateTime
+  sexo                String
+  estadoCivil         String?
+  tipoSanguineo       String?
+  alergias            String[]
+  medicamentosUso     String[]
+  observacoesMedicas  String?
+  possuiPlanoSaude    Boolean            @default(false)
+  planoSaude          String?
+  numeroCarteirinha   String?
+  validadeCarteirinha DateTime?
+  isActive            Boolean            @default(true)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  userId              String?            @unique
+  consultas           Consulta[]
+  contatos            PacienteContato[]
+  enderecos           PacienteEndereco[]
+  user                Usuario?           @relation(fields: [userId], references: [id])
+  pacienteStt         PacienteStt?
+  prontuarios         Prontuario[]
+  triagens            Triagem[]
+
+  @@map("pacientes")
+}
+
+/// *
+/// * Endereços dos pacientes
+/// * Um paciente pode ter múltiplos endereços
+model PacienteEndereco {
+  id          String   @id @default(cuid())
+  pacienteId  String
+  tipo        String   @default("residencial")
+  cep         String
+  logradouro  String
+  numero      String
+  complemento String?
+  bairro      String
+  cidade      String
+  estado      String
+  isAtivo     Boolean  @default(true)
+  isPrincipal Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  paciente    Paciente @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+
+  @@map("paciente_enderecos")
+}
+
+/// *
+/// * Contatos dos pacientes
+/// * Inclui telefones, emails e contatos de emergência
+model PacienteContato {
+  id           String   @id @default(cuid())
+  pacienteId   String
+  tipo         String
+  valor        String
+  nome         String?
+  parentesco   String?
+  isEmergencia Boolean  @default(false)
+  isPrincipal  Boolean  @default(false)
+  isAtivo      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  paciente     Paciente @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+
+  @@map("paciente_contatos")
+}
+
+/// *
+/// * Prontuários médicos dos pacientes
+/// * Histórico de atendimentos e evolução médica
+model Prontuario {
+  id                  String    @id @default(cuid())
+  pacienteId          String
+  profissionalId      String
+  consultaId          String?   @unique
+  dataAtendimento     DateTime
+  queixaPrincipal     String?
+  historiaDoenca      String?
+  exameFisico         String?
+  hipoteseDiagnostica String?
+  conduta             String?
+  evolucao            String?
+  anexos              String[]
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  consulta            Consulta? @relation(fields: [consultaId], references: [id])
+  paciente            Paciente  @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+
+  @@map("prontuarios")
+}
+
+/// *
+/// * Consultas de telemedicina
+/// * Registro das consultas realizadas
+model Consulta {
+  id                String                @id @default(cuid())
+  pacienteId        String?
+  dataAgendada      DateTime
+  dataRealizada     DateTime?
+  status            String
+  tipoConsulta      String
+  observacoes       String?
+  prescricao        String?
+  receituario       String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  profissionalId    String?
+  voucher           String?               @unique
+  statusAtendimento String?               @default("NAO_ATENDIDO")
+  agendamentoStt    AgendamentoStt?
+  avaliacao         AvaliacaoConsulta?
+  consultaTempo     ConsultaTempo?
+  paciente          Paciente?             @relation(fields: [pacienteId], references: [id])
+  profissional      Profissional?         @relation(fields: [profissionalId], references: [id], onDelete: Cascade)
+  evolucao          Evolucao?
+  notificacoes      NotificacaoConsulta[]
+  prontuario        Prontuario?
+  metricas          MetricasConsulta?
+  salaAtendimento   SalaAtendimento?
+  triagem           Triagem?
+  voucherAcesso     VoucherAcesso?
+
+  @@index([voucher])
+  @@map("consultas")
+}
+
+/// *
+/// * Sala de Atendimento Virtual
+/// * Representa a sessão de videochamada/chat entre médico e paciente
+model SalaAtendimento {
+  id                   String    @id @default(cuid())
+  consultaId           String    @unique
+  isActive             Boolean   @default(true)
+  createdAt            DateTime  @default(now())
+  startedAt            DateTime?
+  endedAt              DateTime?
+  medicoJoinedAt       DateTime?
+  medicoLeftAt         DateTime?
+  medicoLastActivity   DateTime?
+  medicoIsOnline       Boolean   @default(false)
+  pacienteJoinedAt     DateTime?
+  pacienteLeftAt       DateTime?
+  pacienteLastActivity DateTime?
+  pacienteIsOnline     Boolean   @default(false)
+  consulta             Consulta  @relation(fields: [consultaId], references: [id], onDelete: Cascade)
+
+  @@map("salas_atendimento")
+}
+
+/// *
+/// * Evolução da consulta médica
+/// * Registro detalhado do atendimento com anamnese, diagnóstico e conduta
+model Evolucao {
+  id                           String        @id @default(cuid())
+  consultaId                   String        @unique
+  profissionalId               String?
+  status                       String        @default("Efetivo")
+  tipoAtendimentoMedico        String?
+  classificacaoRiscoEnfermagem String?
+  classificacaoRiscoMedico     String?
+  queixaDuracao                String?
+  tipoQueixa                   String?
+  historiaProgressa            String?
+  antecedentePessoal           Boolean       @default(false)
+  antecedentePessoalDetalhes   String?
+  diagnosticoDetalhado         String?
+  hipoteseDiagnostica          String?
+  conduta                      String?
+  atestado                     Boolean       @default(false)
+  prescricao                   Boolean       @default(false)
+  solicitacaoExames            Boolean       @default(false)
+  desfecho                     String?
+  statusEvolucao               String        @default("rascunho")
+  createdAt                    DateTime      @default(now())
+  updatedAt                    DateTime      @updatedAt
+  atestadoLink                 String?
+  prescricaoLink               String?
+  solicitacaoExamesLink        String?
+  cids                         EvolucaoCID[]
+  consulta                     Consulta      @relation(fields: [consultaId], references: [id], onDelete: Cascade)
+  profissional                 Profissional? @relation(fields: [profissionalId], references: [id])
+
+  @@index([consultaId])
+  @@index([profissionalId])
+  @@map("evolucoes")
+}
+
+/// *
+/// * Relação entre Evolução e CID (Classificação Internacional de Doenças)
+/// * Permite múltiplos CIDs por evolução
+model EvolucaoCID {
+  id         String   @id @default(cuid())
+  evolucaoId String
+  codigo     String
+  descricao  String
+  principal  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  evolucao   Evolucao @relation(fields: [evolucaoId], references: [id], onDelete: Cascade)
+
+  @@index([evolucaoId])
+  @@map("evolucao_cids")
+}
+
+/// *
+/// * Integrações externas do sistema
+/// * Armazena credenciais criptografadas de APIs externas
+model Integration {
+  id              String    @id @default(cuid())
+  name            String    @unique
+  type            String
+  apiKey          String?
+  apiSecret       String?
+  config          Json?
+  isActive        Boolean   @default(false)
+  lastTestAt      DateTime?
+  lastTestSuccess Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  createdBy       String?
+  updatedBy       String?
+  customToken     String?
+
+  @@map("integrations")
+}
+
+/// *
+/// * Registro de profissionais na Memed
+/// * Rastreia o status de registro de cada profissional na plataforma Memed
+model MemedRegistro {
+  id             String                @id @default(cuid())
+  profissionalId String                @unique
+  memedStatus    String                @default("pendente")
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  erros          MemedRegistroErro[]
+  sucesso        MemedRegistroSucesso?
+  profissional   Profissional          @relation(fields: [profissionalId], references: [id])
+
+  @@map("memed_registros")
+}
+
+/// *
+/// * Registro de sucesso na Memed
+/// * Armazena dados de profissionais registrados com sucesso
+model MemedRegistroSucesso {
+  id               String        @id @default(cuid())
+  registroId       String        @unique
+  token            String
+  uf               String?
+  registroConselho String?
+  createdAt        DateTime      @default(now())
+  registro         MemedRegistro @relation(fields: [registroId], references: [id])
+
+  @@map("memed_registro_sucessos")
+}
+
+/// *
+/// * Erros de registro na Memed
+/// * Armazena histórico de erros ao tentar registrar profissionais
+model MemedRegistroErro {
+  id               String        @id @default(cuid())
+  registroId       String
+  codigoErro       String
+  tituloErro       String
+  detalheErro      String
+  payloadEnviado   String
+  respostaCompleta String?
+  createdAt        DateTime      @default(now())
+  registro         MemedRegistro @relation(fields: [registroId], references: [id])
+
+  @@index([registroId])
+  @@map("memed_registro_erros")
+}
+
+/// *
+/// * Disponibilidade dos profissionais de saúde
+/// * Controle de agenda dos profissionais
+model DisponibilidadeProfissional {
+  id             String       @id @default(cuid())
+  profissionalId String
+  diaSemana      Int
+  horaInicio     String
+  horaFim        String
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  profissional   Profissional @relation(fields: [profissionalId], references: [id], onDelete: Cascade)
+
+  @@map("disponibilidade_profissionais")
+}
+
+/// *
+/// * Disponibilidade específica por data
+/// * Permite configurar disponibilidades em datas específicas que sobrescrevem as recorrentes
+model DisponibilidadeEspecifica {
+  id             String       @id @default(cuid())
+  profissionalId String
+  data           DateTime     @db.Date
+  horaInicio     String
+  horaFim        String
+  motivo         String?
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  profissional   Profissional @relation(fields: [profissionalId], references: [id], onDelete: Cascade)
+
+  @@unique([profissionalId, data, horaInicio, horaFim])
+  @@index([data])
+  @@map("disponibilidade_especifica")
+}
+
+model EscalaProfissionais {
+  id              String       @id @default(cuid())
+  profissionalId  String
+  data            DateTime     @db.Date
+  horaInicio      String
+  horaFim         String
+  tipoRecorrencia String
+  dataOrigem      DateTime?    @db.Date
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  profissional    Profissional @relation(fields: [profissionalId], references: [id], onDelete: Cascade)
+
+  @@index([profissionalId, data])
+  @@map("escalas_profissionais")
+}
+
+/// *
+/// * IPs bloqueados por segurança
+/// * Registra IPs que foram bloqueados devido a tentativas de login maliciosas
+model IpBloqueado {
+  id        String   @id @default(cuid())
+  ipAddress String   @unique
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@map("blocked_ips")
+}
+
+/// *
+/// * Logs de auditoria centralizados
+/// * Registra todas as ações importantes dos usuários no sistema
+model LogAuditoria {
+  id        String     @id @default(cuid())
+  action    ActionType
+  route     String
+  userId    String?
+  context   Json?
+  createdAt DateTime   @default(now())
+
+  @@map("audit_logs")
+}
+
+/// *
+/// * Vulnerabilidades de dependências
+/// * Registra vulnerabilidades encontradas nas dependências do projeto
+model Vulnerabilidade {
+  id           Int                   @id @default(autoincrement())
+  packageName  String
+  severity     VulnerabilitySeverity
+  title        String
+  url          String
+  status       VulnerabilityStatus   @default(NEW)
+  firstFoundAt DateTime              @default(now())
+  lastFoundAt  DateTime              @updatedAt
+
+  @@unique([packageName, title])
+  @@map("vulnerabilities")
+}
+
+/// *
+/// * Configuração de Prioridade da Fila de Atendimento
+/// * Define as regras de ordenação dinâmica da fila de consultas
+model ConfiguracaoPrioridadeFila {
+  id               String   @id @default(cuid())
+  ordem            Int      @unique
+  nome             String
+  descricao        String?
+  tipoFiltro       String
+  operador         String
+  valorFiltro      String
+  campoOrdenacao   String
+  direcaoOrdenacao String
+  corIndicador     String?
+  icone            String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  createdBy        String?
+  updatedBy        String?
+
+  @@index([isActive])
+  @@index([tipoFiltro])
+  @@map("configuracao_prioridade_fila")
+}
+
+/// *
+/// * Rastreamento de acesso aos vouchers
+/// * Registra quando e como os pacientes acessam os vouchers
+model VoucherAcesso {
+  id               String    @id @default(cuid())
+  voucher          String    @unique
+  primeiroAcessoEm DateTime?
+  ultimoAcessoEm   DateTime?
+  totalAcessos     Int       @default(0)
+  ipPrimeiroAcesso String?
+  ipUltimoAcesso   String?
+  userAgent        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  consulta         Consulta  @relation(fields: [voucher], references: [voucher], onDelete: Cascade)
+
+  @@index([voucher])
+  @@map("voucher_acessos")
+}
+
+/// *
+/// * Tempos de atendimento da consulta
+/// * Registra métricas de tempo para análise
+model ConsultaTempo {
+  id                         String          @id @default(cuid())
+  consultaId                 String          @unique
+  profissionalAtualId        String?
+  pacienteAcessouEm          DateTime?
+  profissionalAcessouEm      DateTime?
+  atendimentoIniciadoEm      DateTime?
+  atendimentoFinalizadoEm    DateTime?
+  duracaoAtendimentoMinutos  Int?
+  tempoEsperaPacienteMinutos Int?
+  createdAt                  DateTime        @default(now())
+  updatedAt                  DateTime        @updatedAt
+  consulta                   Consulta        @relation(fields: [consultaId], references: [id], onDelete: Cascade)
+  profissionalAtual          Profissional?   @relation(fields: [profissionalAtualId], references: [id])
+  periodosEspera             PeriodoEspera[]
+
+  @@index([consultaId])
+  @@map("consulta_tempos")
+}
+
+/// *
+/// * Status online de usuários
+/// * Rastreia presença online de pacientes e profissionais
+model UsuarioOnlineStatus {
+  id              String    @id @default(cuid())
+  usuarioId       String
+  voucher         String?
+  isOnline        Boolean   @default(false)
+  lastSeenAt      DateTime  @default(now())
+  onlineDesde     DateTime?
+  dispositivoInfo String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  usuario         Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, voucher])
+  @@index([usuarioId])
+  @@index([voucher])
+  @@map("usuario_online_status")
+}
+
+/// *
+/// * Histórico de acessos de profissionais aos vouchers
+/// * Registra cada vez que um profissional acessa um voucher
+model ProfissionalVoucherAcesso {
+  id                  String       @id @default(cuid())
+  voucher             String
+  profissionalId      String
+  acessouEm           DateTime     @default(now())
+  saiuEm              DateTime?
+  tempoAtendimentoMin Int?
+  ipAddress           String?
+  userAgent           String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  profissional        Profissional @relation(fields: [profissionalId], references: [id], onDelete: Cascade)
+
+  @@index([voucher])
+  @@index([profissionalId])
+  @@index([acessouEm])
+  @@map("profissional_voucher_acessos")
+}
+
+/// *
+/// * Períodos de espera de uma consulta
+/// * Registra múltiplos períodos de aguardo quando profissional sai e paciente continua online
+model PeriodoEspera {
+  id                     String        @id @default(cuid())
+  consultaTempoId        String
+  inicioEspera           DateTime      @default(now())
+  fimEspera              DateTime?
+  duracaoMinutos         Int?
+  motivo                 String?
+  profissionalAnteriorId String?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  consultaTempo          ConsultaTempo @relation(fields: [consultaTempoId], references: [id], onDelete: Cascade)
+  profissionalAnterior   Profissional? @relation("ProfissionalAnterior", fields: [profissionalAnteriorId], references: [id])
+
+  @@index([consultaTempoId])
+  @@index([inicioEspera])
+  @@map("periodos_espera")
+}
+
+/// *
+/// * Mensagens de chat vinculadas ao voucher
+/// * Sistema de chat interno para consultas entre profissional e paciente
+/// * Suporte a arquivos (até 10MB) e links com preview
+model ChatMessage {
+  id                     String    @id @default(cuid())
+  content                String
+  voucher                String
+  usuarioId              String
+  senderType             String
+  type                   String    @default("TEXT")
+  fileName               String?
+  fileUrl                String?
+  fileSize               Int?
+  mimeType               String?
+  linkPreviewTitle       String?
+  linkPreviewDescription String?
+  linkPreviewImage       String?
+  readAt                 DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  usuario                Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([voucher])
+  @@index([usuarioId])
+  @@index([createdAt])
+  @@index([senderType])
+  @@map("chat_messages")
+}
+
+/// *
+/// * Modelo de Avaliação de Consulta
+/// * Armazena as avaliações dos pacientes após as consultas
+model AvaliacaoConsulta {
+  id                    String   @id @default(cuid())
+  consultaId            String   @unique
+  voucher               String   @unique
+  notaPlataforma        Int
+  notaRecepcao          Int
+  notaAtendimentoMedico Int
+  observacoes           String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  consulta              Consulta @relation(fields: [consultaId], references: [id])
+
+  @@index([voucher])
+  @@index([createdAt])
+  @@map("avaliacoes_consulta")
+}
+
+/// *
+/// * Pacientes cadastrados pelo sistema STT
+/// * Sistema de Teleassistência e Telemedicina
+model PacienteStt {
+  id              String           @id @default(cuid())
+  matricula       String           @unique
+  token           String?          @unique
+  nome            String
+  sobrenome       String
+  genero          String?
+  sexo            String?
+  dataNascimento  DateTime?
+  cpf             String?
+  telefone        String?
+  email           String?
+  endereco        String?
+  cidade          String?
+  estado          String?
+  cep             String?
+  pacienteId      String?          @unique
+  isActive        Boolean          @default(true)
+  deletedAt       DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  estipulante     String?
+  agendamentosStt AgendamentoStt[]
+  paciente        Paciente?        @relation(fields: [pacienteId], references: [id])
+
+  @@map("pacientes_stt")
+}
+
+/// *
+/// * Agendamentos realizados pelo sistema STT
+model AgendamentoStt {
+  id                 String       @id @default(cuid())
+  matricula          String
+  voucher            String       @unique
+  codigoInterno      String?
+  data               DateTime
+  especialidade      String?
+  profissionalNome   String?
+  observacoes        String?
+  status             String       @default("agendado")
+  pacienteSttId      String?
+  consultaId         String?      @unique
+  deletedAt          DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  classificacaoRisco String?
+  estipulante        String?
+  origem             String?
+  sistemaOrigem      String?
+  tipoAtendimento    String?
+  triagem            String?
+  consulta           Consulta?    @relation(fields: [consultaId], references: [id])
+  pacienteStt        PacienteStt? @relation(fields: [pacienteSttId], references: [id])
+
+  @@index([pacienteSttId])
+  @@map("agendamentos_stt")
+}
+
+/// *
+/// * CID - Classificação Internacional de Doenças
+model Cid {
+  id           String    @id @default(cuid())
+  codigo       String    @unique
+  descricao    String
+  categoria    String?
+  subcategoria String?
+  isActive     Boolean   @default(true)
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  triagens     Triagem[]
+
+  @@map("cids")
+}
+
+/// *
+/// * Triagem de pacientes
+model Triagem {
+  id                 String    @id @default(cuid())
+  pacienteId         String
+  consultaId         String?   @unique
+  sintomas           String
+  pressaoArterial    String?
+  frequenciaCardiaca Int?
+  temperatura        Float?
+  saturacao          Int?
+  dor                Int?
+  classificacao      String?
+  prioridade         String?
+  observacoes        String?
+  cidId              String?
+  deletedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  cid                Cid?      @relation(fields: [cidId], references: [id])
+  consulta           Consulta? @relation(fields: [consultaId], references: [id])
+  paciente           Paciente  @relation(fields: [pacienteId], references: [id])
+
+  @@index([pacienteId])
+  @@index([consultaId])
+  @@index([cidId])
+  @@map("triagens")
+}
+
+/// *
+/// * Temas personalizados para UI
+model TemaPersonalizado {
+  id              String   @id @default(cuid())
+  nome            String   @unique
+  descricao       String?
+  configuracao    Json?
+  cores           Json
+  tipografia      Json?
+  componentStyles Json?
+  isPublico       Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  isDefault       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("temas_personalizados")
+}
+
+/// *
+/// * Notificações de Consulta
+/// * Registra todas as notificações enviadas ou pendentes para consultas
+model NotificacaoConsulta {
+  id                   String    @id @default(cuid())
+  consultaId           String
+  tipoNotificacao      String
+  tipoConsulta         String
+  status               String
+  canal                String
+  destinatarioNome     String
+  destinatarioTelefone String
+  dataAgendamento      DateTime?
+  dataProgramada       DateTime
+  dataEnvio            DateTime?
+  mensagem             String?
+  voucher              String
+  linkAcesso           String
+  tentativas           Int       @default(0)
+  ultimoErro           String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  consulta             Consulta  @relation(fields: [consultaId], references: [id])
+
+  @@index([status, dataProgramada])
+  @@index([consultaId])
+  @@index([voucher])
+  @@map("notificacoes_consulta")
+}
+
+model PacienteSttAuditLog {
+  id              String   @id @default(cuid())
+  pacienteSttId   String
+  acao            String
+  camposAlterados Json?
+  dadosAnteriores Json?
+  dadosNovos      Json?
+  ipOrigem        String?
+  userAgent       String?
+  headers         Json?
+  payloadRecebido Json?
+  tokenGerado     String?
+  createdAt       DateTime @default(now())
+
+  @@index([pacienteSttId])
+  @@index([acao])
+  @@index([createdAt])
+  @@map("pacientes_stt_audit_log")
+}
+
+model AgendamentoSttAuditLog {
+  id              String   @id @default(cuid())
+  agendamentoId   String?
+  voucher         String
+  acao            String
+  payloadRecebido Json?
+  resposta        Json?
+  erro            String?
+  ipOrigem        String?
+  userAgent       String?
+  headers         Json?
+  createdAt       DateTime @default(now())
+
+  @@index([voucher])
+  @@index([agendamentoId])
+  @@index([createdAt])
+  @@map("agendamentos_stt_audit_log")
+}
+
+/// *
+/// * Tipos de ação para auditoria
+/// * Define os tipos de ações que podem ser registradas no sistema
+enum ActionType {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN_SUCCESS
+  LOGIN_FAILURE
+  ACCESS_DENIED
+  ERROR
+}
+
+/// *
+/// * Severidade das vulnerabilidades
+/// * Define os níveis de severidade das vulnerabilidades encontradas
+enum VulnerabilitySeverity {
+  INFO
+  LOW
+  MODERATE
+  HIGH
+  CRITICAL
+}
+
+/// *
+/// * Status das vulnerabilidades
+/// * Define o status atual de cada vulnerabilidade no sistema
+enum VulnerabilityStatus {
+  NEW
+  IGNORED
+  RESOLVED
+}
+
+// =============================================================================
+// MÉTRICAS DE CONSULTA - ADICIONADO PARA TRACKING COMPLETO
+// =============================================================================
+
+model MetricasConsulta {
+  id                      String    @id @default(cuid())
+  consultaId              String    @unique @map("consulta_id")
+  voucher                 String
+  
+  // Timestamps detalhados
+  consultaCriadaEm        DateTime  @default(now()) @map("consulta_criada_em")
+  consultaCanceladaEm     DateTime? @map("consulta_cancelada_em")
+  consultaFinalizadaEm    DateTime? @map("consulta_finalizada_em")
+  
+  // Métricas de acesso
+  primeiroAcessoPaciente  DateTime? @map("primeiro_acesso_paciente")
+  primeiroAcessoMedico    DateTime? @map("primeiro_acesso_medico")
+  
+  // Métricas de sala (Jitsi)
+  pacienteEntrouJitsiEm   DateTime? @map("paciente_entrou_jitsi_em")
+  pacienteSaiuJitsiEm     DateTime? @map("paciente_saiu_jitsi_em")
+  medicoEntrouJitsiEm     DateTime? @map("medico_entrou_jitsi_em")
+  medicoSaiuJitsiEm       DateTime? @map("medico_saiu_jitsi_em")
+  
+  // Tempo efetivo (ambos no Jitsi)
+  inicioConsultaEfetiva   DateTime? @map("inicio_consulta_efetiva")
+  fimConsultaEfetiva      DateTime? @map("fim_consulta_efetiva")
+  duracaoEfetivaMinutos   Int? @map("duracao_efetiva_minutos")
+  
+  // Métricas calculadas
+  tempoRespostaPaciente   Int? @map("tempo_resposta_paciente")     // Minutos entre médico entrar e paciente entrar
+  tempoEsperaPaciente     Int? @map("tempo_espera_paciente")       // Minutos desde criação até médico entrar
+  taxaAbandono            Boolean   @default(false) @map("taxa_abandono")
+  
+  // Contadores
+  qtdSaidasPaciente       Int       @default(0) @map("qtd_saidas_paciente")
+  qtdSaidasMedico         Int       @default(0) @map("qtd_saidas_medico")
+  
+  // Metadata
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+  
+  consulta                Consulta  @relation(fields: [consultaId], references: [id])
+  eventos                 EventoMetrica[]
+  
+  @@index([consultaId])
+  @@index([voucher])
+  @@index([consultaCriadaEm])
+  @@map("metricas_consultas")
+}
+
+model EventoMetrica {
+  id              String           @id @default(cuid())
+  metricaId       String           @map("metrica_id")
+  tipoEvento      String           @map("tipo_evento")          // entrada_sala, saida_sala, reconexao, etc
+  usuario         String           // medico, paciente
+  timestamp       DateTime         @default(now())
+  metadata        Json?            // Dados adicionais do evento
+  
+  metrica         MetricasConsulta @relation(fields: [metricaId], references: [id])
+  
+  @@index([metricaId])
+  @@index([timestamp])
+  @@map("eventos_metricas")
+}
+
+// Tabela de controle de envios STT - Adicionada em 12/09/2025
+// IMPORTANTE: Tabela isolada sem FK para não afetar produção
+model SttEnvioControle {
+  id                      String    @id @default(cuid())
+  
+  // Referências (sem relação para não afetar produção)
+  consultaId              String    @map("consulta_id")
+  voucher                 String
+  codigoInternoStt        String?   @map("codigo_interno_stt")
+  
+  // Controle de envio
+  enviado                 Boolean   @default(false)
+  dataEnvio              DateTime? @map("data_envio")
+  tentativas             Int       @default(0)
+  ultimaTentativa        DateTime? @map("ultima_tentativa")
+  proximoRetry           DateTime? @map("proximo_retry")
+  processandoDesde       DateTime? @map("processando_desde") // NOVO: Flag para controle de concorrência
+  
+  // Resposta
+  respostaStatusCode     Int?      @map("resposta_status_code")
+  respostaBody          String?   @map("resposta_body") @db.Text
+  respostaHeaders       String?   @map("resposta_headers") @db.Text
+  respostaErro          String?   @map("resposta_erro") @db.Text
+  
+  // Metadados
+  pacienteNome           String?   @map("paciente_nome")
+  pacienteCpfHash        String?   @map("paciente_cpf_hash")
+  profissionalNome       String?   @map("profissional_nome")
+  profissionalRegistro   String?   @map("profissional_registro")
+  dataConsulta           DateTime? @map("data_consulta")
+  dataFinalizacaoEvolucao DateTime? @map("data_finalizacao_evolucao")
+  
+  // Payload
+  payloadEnviado         String?   @map("payload_enviado") @db.Text
+  
+  // Timestamps
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+  
+  // Índices para performance
+  @@index([consultaId])
+  @@index([voucher])
+  @@index([enviado])
+  @@index([tentativas])
+  @@index([createdAt])
+  @@index([proximoRetry])
+  
+  @@map("stt_envio_controle")
+}
